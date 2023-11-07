@@ -2,6 +2,9 @@ require 'httpclient'
 
 module RedmineSlack
 class Listener < Redmine::Hook::Listener
+	include IssuesHelper
+	include ActionView::Helpers::DateHelper
+
 	def redmine_slack_issues_new_after_save(context={})
 		issue = context[:issue]
 
@@ -11,23 +14,18 @@ class Listener < Redmine::Hook::Listener
 		return unless channel and url
 		return if issue.is_private?
 
-		msg = "[#{escape issue.project}] #{escape issue.author} created <#{object_url issue}|#{escape issue}>#{mentions issue.description}"
+		msg = "#{escape issue.author} created task <#{object_url issue}|#{escape issue.subject}> in project #{escape issue.project}"
 
 		attachment = {}
 		attachment[:text] = escape issue.description if issue.description
-		attachment[:fields] = [{
-			:title => I18n.t("field_status"),
-			:value => escape(issue.status.to_s),
+
+		attachment[:fields] = []
+
+		attachment[:fields] << {
+			:title => I18n.t("field_due_date"),
+			:value => escape(issue_due_date_details(issue)),
 			:short => true
-		}, {
-			:title => I18n.t("field_priority"),
-			:value => escape(issue.priority.to_s),
-			:short => true
-		}, {
-			:title => I18n.t("field_assigned_to"),
-			:value => escape(issue.assigned_to.to_s),
-			:short => true
-		}]
+		} unless issue&.due_date.nil?
 
 		attachment[:fields] << {
 			:title => I18n.t("field_watcher"),
@@ -121,7 +119,7 @@ class Listener < Redmine::Hook::Listener
 
 		channel = channel_for_project project
 		url = url_for_project project
-		
+
 		return unless channel and url
 
 		attachment = nil
